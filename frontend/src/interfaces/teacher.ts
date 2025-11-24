@@ -2,7 +2,7 @@ import { Address } from "./adress"
 
 
 interface Teacher {
-  id: number
+  id?: number
   name: string
   cpf: string
   phone: string
@@ -10,8 +10,10 @@ interface Teacher {
   addressId: number
   email: string
   address: Address
+  observation: string
+  birthDate: string | Date
   Class: any[]
   classLinks: any[]
 }
 
-export type {Teacher}
+export type { Teacher }

@@ -13,7 +13,7 @@ export default {
         startDate,
         endDate,
         courseId,
-        // teacherId,
+        teacherId,
       } = req.body;
 
       const classExists = await prisma.class.findUnique({ where: { code } });
@@ -33,7 +33,7 @@ export default {
           startDate,
           endDate,
           courseId,
-          // teacherId
+          teacherId
         },
       });
 
@@ -59,6 +59,7 @@ export default {
               name: true,
             },
           },
+          _count: { select: { students: true } }
         },
       });
 
@@ -72,47 +73,64 @@ export default {
   async getAllAvailableClasses(req, res) {
     const { student_id } = req.params;
 
-      const studentId = Number(student_id);
-  if (isNaN(studentId)) {
-    return res.status(400).json({ error: "ID do aluno inválido" });
-  }
     try {
-      const classes = await prisma.class.findMany({
-        where: {
-          AND: [{
+      let classes;
+
+      // ✅ Se não recebeu student_id, retorna todas as turmas disponíveis
+      if (!student_id) {
+        classes = await prisma.class.findMany({
+          where: {
             endDate: {
-              gte: new Date(), // Filtra classes que ainda não terminaram
+              gte: new Date(), // Apenas turmas que ainda não acabaram
             },
-          }, {
-            students: {
-              none: {
-                id: studentId, // Filtra classes que o aluno ainda não está matriculado
+          },
+          include: {
+            course: { select: { name: true } },
+            teacher: { select: { name: true } },
+          },
+        });
+
+        return res.status(200).json(classes);
+      }
+
+      // ✅ Se recebeu student_id, valida
+      const studentId = Number(student_id);
+      if (isNaN(studentId)) {
+        return res.status(400).json({ error: "ID do aluno inválido" });
+      }
+
+      // ✅ Busca turma filtrando o aluno
+      classes = await prisma.class.findMany({
+        where: {
+          AND: [
+            {
+              endDate: {
+                gte: new Date(),
               },
             },
-
-          }
-          ]
+            {
+              students: {
+                none: {
+                  id: studentId,
+                },
+              },
+            },
+          ],
         },
         include: {
-          course: {
-            select: {
-              name: true,
-            },
-          },
-          teacher: {
-            select: {
-              name: true,
-            },
-          },
+          course: { select: { name: true } },
+          teacher: { select: { name: true } },
         },
       });
 
       return res.status(200).json(classes);
+
     } catch (error) {
       console.error("Erro ao buscar classes:", error);
       return res.status(500).json({ error: "Erro interno ao buscar classes" });
     }
   },
+
 
   async getAllClassesByTeacherId(req, res) {
     try {
@@ -255,7 +273,7 @@ export default {
   async deleteTeacher(req, res) {
     try {
       const { id } = req.params;
-      
+
       const classe = await prisma.class.findUnique({
         where: { id: Number(id) },
       });
@@ -303,43 +321,39 @@ export default {
     }
   },
   async searchClasses(req, res) {
-  try {
-    const { name, code, turno, courseName, teacherName, startDate, endDate } = req.query;
+    try {
+      const { name, code, turno, courseName, teacherName, startDate, endDate } = req.query;
 
-    const classes = await prisma.class.findMany({
-      where: {
-        name: name ? { contains: name, mode: "insensitive" } : undefined,
-        code: code ? { contains: code, mode: "insensitive" } : undefined,
-        turno: turno ? { contains: turno, mode: "insensitive" } : undefined,
-        startDate: startDate ? { gte: new Date(startDate) } : undefined,
-        endDate: endDate ? { lte: new Date(endDate) } : undefined,
-        course: courseName
-          ? {
+      const classes = await prisma.class.findMany({
+        where: {
+          name: name ? { contains: name, mode: "insensitive" } : undefined,
+          code: code ? { contains: code, mode: "insensitive" } : undefined,
+          turno: turno ? { contains: turno, mode: "insensitive" } : undefined,
+          startDate: startDate ? { gte: new Date(startDate) } : undefined,
+          endDate: endDate ? { lte: new Date(endDate) } : undefined,
+          course: courseName
+            ? {
               name: { contains: courseName, mode: "insensitive" },
             }
-          : undefined,
-        teacher: teacherName
-          ? {
+            : undefined,
+          teacher: teacherName
+            ? {
               name: { contains: teacherName, mode: "insensitive" },
             }
-          : undefined,
-      },
-      include: {
-        course: true,
-        teacher: true,
-        students: {
-          include: {
-            student: true,
-          },
+            : undefined,
         },
-      },
-    });
+        include: {
+          course: true,
+          teacher: true,
+          _count: { select: { students: true } }
+        },
+      });
 
-    res.status(200).json(classes);
-  } catch (error) {
-    console.error("Erro ao buscar turmas com filtros:", error);
-    res.status(500).json({ error: "Erro interno ao buscar turmas" });
+      res.status(200).json(classes);
+    } catch (error) {
+      console.error("Erro ao buscar turmas com filtros:", error);
+      res.status(500).json({ error: "Erro interno ao buscar turmas" });
+    }
   }
-}
 
 };

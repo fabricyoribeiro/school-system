@@ -22,7 +22,7 @@ export default {
 
   async createStudent(req, res) {
     try {
-      const { name, cpf, phone, email, picture, password, address } = req.body;
+      const { name, cpf, phone, email, picture, password, address, birthDate, observation } = req.body;
 
       console.log(req.body);
 
@@ -57,6 +57,8 @@ export default {
           phone,
           email,
           picture,
+          birthDate: birthDate ? new Date(birthDate) : null,
+          observation,
           password: hashedPassword,
           addressId: newAddress.id,
         },
@@ -74,95 +76,97 @@ export default {
     }
   },
 
-async createClassStudent(req, res) {
-  try {
-    const { studentId, selectedClasses } = req.body;
+  async createClassStudent(req, res) {
+    try {
+      const { studentId, selectedClasses } = req.body;
 
-    const studentExists = await prisma.student.findUnique({
-      where: { id: Number(studentId) },
-      include: {
-        discount: true, // incluir o desconto se existir
-      },
-    });
-
-    if (!studentExists) {
-      return res.status(409).json({ error: "Estudante não cadastrado" });
-    }
-
-    // Cria os vínculos student <-> class
-    const studentClasses = selectedClasses.map((classe) => ({
-      classId: classe.id,
-      studentId: Number(studentId),
-    }));
-
-    await prisma.class_Student.createMany({
-      data: studentClasses,
-    });
-
-    for (const classe of selectedClasses) {
-      const classData = await prisma.class.findUnique({
-        where: { id: classe.id },
-        include: { course: true },
-      });
-
-      if (!classData || !classData.course) {
-        console.log(`Curso não encontrado para a turma ${classe.id}`);
-        continue;
-      }
-
-      const registrationFeeValue = classData.course.registrationFeeValue ?? 0;
-      let monthlyFeeValue = classData.course.MonthlyFeeValue ?? 0;
-
-      // Verificar se o aluno possui desconto
-      if (studentExists.discount) {
-        const discountPercentage = studentExists.discount.percentage;
-        // Aplicar desconto no valor da mensalidade
-        monthlyFeeValue = monthlyFeeValue - (monthlyFeeValue * (discountPercentage / 100));
-        
-      }
-
-      const today = new Date();
-
-      // Cria fee de matrícula (sem desconto)
-      await prisma.fee.create({
-        data: {
-          studentId: Number(studentId),
-          price: registrationFeeValue,
-          dueDate: today,
-          description: `Matrícula - ${classData.name}`,
+      const studentExists = await prisma.student.findUnique({
+        where: { id: Number(studentId) },
+        include: {
+          discount: true, // incluir o desconto se existir
         },
       });
 
-      // Cria 5 mensalidades
-      for (let i = 1; i <= 5; i++) {
-        const dueDate = new Date(today);
-        const targetMonth = dueDate.getMonth() + i;
-        const targetYear = dueDate.getFullYear();
+      if (!studentExists) {
+        return res.status(409).json({ error: "Estudante não cadastrado" });
+      }
 
-        let day = today.getDate();
-        const tempDate = new Date(targetYear, targetMonth, day);
+      // Cria os vínculos student <-> class
+      const studentClasses = selectedClasses.map((classe) => ({
+        classId: classe.id,
+        studentId: Number(studentId),
+      }));
 
-        if (tempDate.getMonth() !== (targetMonth % 12)) {
-          tempDate.setDate(0);
+      await prisma.class_Student.createMany({
+        data: studentClasses,
+      });
+
+      for (const classe of selectedClasses) {
+        const classData = await prisma.class.findUnique({
+          where: { id: classe.id },
+          include: { course: true },
+        });
+
+        if (!classData || !classData.course) {
+          console.log(`Curso não encontrado para a turma ${classe.id}`);
+          continue;
         }
 
+        const registrationFeeValue = classData.course.registrationFeeValue ?? 0;
+        let monthlyFeeValue = classData.course.MonthlyFeeValue ?? 0;
+
+        // Verificar se o aluno possui desconto
+        if (studentExists.discount) {
+          const discountPercentage = studentExists.discount.percentage;
+          // Aplicar desconto no valor da mensalidade
+          monthlyFeeValue = monthlyFeeValue - (monthlyFeeValue * (discountPercentage / 100));
+
+        }
+
+        const today = new Date();
+
+        // Cria fee de matrícula (sem desconto)
         await prisma.fee.create({
           data: {
             studentId: Number(studentId),
-            price: parseFloat(monthlyFeeValue.toFixed(2)),
-            dueDate: tempDate,
-            description: `Mensalidade ${i} - ${classData.name}`,
+            price: registrationFeeValue,
+            classId: classe.id ?? null,
+            dueDate: today,
+            description: `Matrícula - ${classData.name}`,
           },
         });
-      }
-    }
 
-    return res.status(200).json({ message: "Matrícula efetuada com sucesso e fees criados" });
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({ error: "Erro ao matricular estudante" });
-  }
-},
+        // Cria 5 mensalidades
+        for (let i = 1; i <= 5; i++) {
+          const dueDate = new Date(today);
+          const targetMonth = dueDate.getMonth() + i;
+          const targetYear = dueDate.getFullYear();
+
+          let day = today.getDate();
+          const tempDate = new Date(targetYear, targetMonth, day);
+
+          if (tempDate.getMonth() !== (targetMonth % 12)) {
+            tempDate.setDate(0);
+          }
+
+          await prisma.fee.create({
+            data: {
+              studentId: Number(studentId),
+              price: parseFloat(monthlyFeeValue.toFixed(2)),
+              classId: classe.id ?? null,
+              dueDate: tempDate,
+              description: `Mensalidade ${i} - ${classData.name}`,
+            },
+          });
+        }
+      }
+
+      return res.status(200).json({ message: "Matrícula efetuada com sucesso e fees criados" });
+    } catch (error) {
+      console.log(error);
+      return res.status(500).json({ error: "Erro ao matricular estudante" });
+    }
+  },
 
 
 
@@ -288,7 +292,7 @@ async createClassStudent(req, res) {
   async updateStudent(req, res) {
     try {
       const { id } = req.params;
-      const { name, cpf, phone, email, picture, address } = req.body;
+      const { name, cpf, password, phone, email, picture, address, birthDate, observation } = req.body;
 
       console.log("CHEGANDO: ", name, cpf, phone, email, picture, address);
 
@@ -308,11 +312,15 @@ async createClassStudent(req, res) {
         });
       }
 
-      // const hashedPassword = await hashPassword(password);
+      let hashedPassword = studentExists.password;
+
+      if (password && password.trim() !== "") {
+        hashedPassword = await hashPassword(password);
+      }
 
       const updatedStudent = await prisma.student.update({
         where: { id: Number(id) },
-        data: { name, cpf, phone, email, picture },
+        data: { name, cpf, phone, email, picture, password: hashedPassword, birthDate: birthDate ? new Date(birthDate) : null, observation },
         include: {
           address: true,
           attendances: true,
@@ -353,33 +361,39 @@ async createClassStudent(req, res) {
   },
 
   // Deletar student
-  async deleteStudent(req, res) {
-    try {
-      const { id } = req.params;
+async deleteStudent(req, res) {
+  try {
+    const { id } = req.params;
 
-      const student = await prisma.student.findUnique({
-        where: { id: Number(id) },
-      });
+    const student = await prisma.student.findUnique({
+      where: { id: Number(id) },
+    });
 
-      if (!student) {
-        return res.status(404).json({ error: "Student não encontrado" });
-      }
-
-      await prisma.student.delete({
-        where: { id: Number(id) },
-      });
-
-      // (Opcional) deletar endereço associado
-      // await prisma.address.delete({
-      //   where: { id: student.addressId },
-      // });
-
-      res.status(204).send();
-    } catch (error) {
-      console.error("Erro ao deletar student:", error);
-      res.status(500).json({ error: "Erro interno ao deletar student" });
+    if (!student) {
+      return res.status(404).json({ error: "Estudante não encontrado" });
     }
-  },
+
+    const classExists = await prisma.class_Student.findFirst({
+      where: { studentId: Number(id) },
+    });
+
+    if (classExists) {
+      return res
+        .status(409) 
+        .json({ error: "Estudante matriculado em cursos, exclua a matrícula antes" });
+    }
+
+    await prisma.student.delete({
+      where: { id: Number(id) },
+    });
+
+    return res.status(204).send(); // sucesso, sem conteúdo
+  } catch (error) {
+    console.error("Erro ao deletar student:", error);
+    return res.status(500).json({ error: "Erro interno ao deletar estudante" });
+  }
+},
+
 
   async searchStudents(req, res) {
     try {
@@ -403,19 +417,19 @@ async createClassStudent(req, res) {
           classLinks:
             turma || curso
               ? {
-                  some: {
-                    class: {
-                      name: turma
-                        ? { contains: turma, mode: "insensitive" }
-                        : undefined,
-                      course: curso
-                        ? {
-                            name: { contains: curso, mode: "insensitive" },
-                          }
-                        : undefined,
-                    },
+                some: {
+                  class: {
+                    name: turma
+                      ? { contains: turma, mode: "insensitive" }
+                      : undefined,
+                    course: curso
+                      ? {
+                        name: { contains: curso, mode: "insensitive" },
+                      }
+                      : undefined,
                   },
-                }
+                },
+              }
               : undefined,
         },
         include: {
@@ -443,15 +457,15 @@ async createClassStudent(req, res) {
     }
   },
 
-  async addDiscount(req, res){
+  async addDiscount(req, res) {
     try {
-      const {id} = req.params
-      const {discountId} = req.body
+      const { id } = req.params
+      const { discountId } = req.body
 
       console.log(id, discountId)
 
       const updatedStudent = await prisma.student.update({
-        where: { id: Number(id)},
+        where: { id: Number(id) },
         data: {
           discountId,
         }
@@ -463,14 +477,14 @@ async createClassStudent(req, res) {
       return res.status(500).json({ error: "Erro interno ao atualizar student" });
     }
   },
-  
-  async deleteDiscount(req, res){
+
+  async deleteDiscount(req, res) {
     try {
-      const {id} = req.params
+      const { id } = req.params
 
       console.log(id)
       const updatedStudent = await prisma.student.update({
-        where: { id: Number(id)},
+        where: { id: Number(id) },
         data: {
           discountId: null
         }

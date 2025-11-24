@@ -2,19 +2,19 @@ import { prisma } from "../../lib/prisma.js";
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
 
-const SECRET_KEY = process.env.JWT_SECRET; 
+const SECRET_KEY = process.env.JWT_SECRET;
 
 export default {
 
-  async logout(req, res){
+  async logout(req, res) {
     try {
-      const {token} = req.body
+      const { token } = req.body
 
       console.log(token)
 
-      await prisma.blackListToken.create({ data: {token}})
+      await prisma.blackListToken.create({ data: { token } })
 
-      return res.status(200).json({message: "token adicionado a blackList"})
+      return res.status(200).json({ message: "token adicionado a blackList" })
 
     } catch (error) {
       console.error("Erro ao fazer logout:", error);
@@ -24,14 +24,14 @@ export default {
 
   async createAdmin(req, res) {
     try {
-      const { name, cpf, phone, picture, password, address } = req.body;
+      const { name, cpf, phone, picture, password, address,birthDate, observation } = req.body;
 
       const adminExists = await prisma.admin.findUnique({ where: { cpf } })
 
-      if(adminExists){
-        return res.status(409).json({error: 'cpf informado já foi cadastrado'})
+      if (adminExists) {
+        return res.status(409).json({ error: 'cpf informado já foi cadastrado' })
       }
-      
+
       // Criação do endereço
       const newAddress = await prisma.address.create({
         data: address,
@@ -47,6 +47,8 @@ export default {
           cpf,
           phone,
           picture,
+          birthDate: birthDate ? new Date(birthDate) : null,
+          observation,
           password: hashedPassword,
           addressId: newAddress.id,
         },
@@ -71,7 +73,7 @@ export default {
         include: { address: true },
       });
 
-      const adminsWithoutPassword = admins.map(({password, ...rest}) => rest)
+      const adminsWithoutPassword = admins.map(({ password, ...rest }) => rest)
 
       res.status(200).json(adminsWithoutPassword);
     } catch (error) {
@@ -80,7 +82,7 @@ export default {
     }
   },
 
-    async getAllNames(req, res) {
+  async getAllNames(req, res) {
     try {
       const admins = await prisma.admin.findMany({
         select: {
@@ -122,7 +124,7 @@ export default {
   async updateAdmin(req, res) {
     try {
       const { id } = req.params;
-      const { name, cpf, phone, picture, password, address } = req.body;
+      const { name, cpf, phone, picture, password, address, birthDate, observation } = req.body;
 
       const adminExists = await prisma.admin.findUnique({
         where: { id: Number(id) },
@@ -140,11 +142,15 @@ export default {
         });
       }
 
-      const hashedPassword = await hashPassword(password)
+      let hashedPassword = adminExists.password;
+
+      if (password && password.trim() !== "") {
+        hashedPassword = await hashPassword(password);
+      }
 
       const updatedAdmin = await prisma.admin.update({
         where: { id: Number(id) },
-        data: { name, cpf, phone, picture, password:hashedPassword },
+        data: { name, cpf, phone, picture, password: hashedPassword, birthDate: birthDate ? new Date(birthDate) : null, observation },
         include: { address: true },
       });
 
@@ -223,7 +229,7 @@ export default {
   },
 };
 
-async function hashPassword(password){
+async function hashPassword(password) {
   const saltRounds = 10
   return await bcrypt.hash(password, saltRounds)
 }

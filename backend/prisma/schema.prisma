@@ -22,20 +22,23 @@ model Address {
 }
 
 model Student {
-  id          Int             @id @default(autoincrement())
-  name        String
-  cpf         String          @unique
-  phone       String?
-  picture     String?
-  password    String
-  addressId   Int
-  email       String?
-  discountId  Int?
-  classLinks  Class_Student[]
-  attendances Attendence[]
-  fees        Fee[]
-  discount    Discount?       @relation(fields: [discountId], references: [id])
-  address     Address         @relation(fields: [addressId], references: [id])
+  id              Int             @id @default(autoincrement())
+  name            String
+  cpf             String          @unique
+  phone           String?
+  picture         String?
+  password        String
+  birthDate       DateTime?
+  addressId       Int
+  email           String?
+  observation     String?
+  themePreference ThemePreference @default(SYSTEM)
+  discountId      Int?
+  classLinks      Class_Student[]
+  attendances     Attendence[]
+  fees            Fee[]
+  discount        Discount?       @relation(fields: [discountId], references: [id])
+  address         Address         @relation(fields: [addressId], references: [id])
 }
 
 model Discount {
@@ -47,16 +50,19 @@ model Discount {
 }
 
 model Teacher {
-  id        Int     @id @default(autoincrement())
-  name      String
-  cpf       String  @unique
-  phone     String?
-  picture   String?
-  password  String
-  addressId Int
-  email     String?
-  Class     Class[]
-  address   Address @relation(fields: [addressId], references: [id])
+  id              Int             @id @default(autoincrement())
+  name            String
+  cpf             String          @unique
+  phone           String?
+  picture         String?
+  password        String
+  birthDate       DateTime?
+  observation     String?
+  addressId       Int
+  email           String?
+  themePreference ThemePreference @default(SYSTEM)
+  Class           Class[]
+  address         Address         @relation(fields: [addressId], references: [id])
 }
 
 model BlackListToken {
@@ -64,16 +70,19 @@ model BlackListToken {
 }
 
 model Admin {
-  id        Int       @id @default(autoincrement())
-  name      String
-  cpf       String    @unique
-  phone     String?
-  picture   String?
-  password  String
-  addressId Int
-  email     String?
-  address   Address   @relation(fields: [addressId], references: [id])
-  payments  Payment[]
+  id              Int             @id @default(autoincrement())
+  name            String
+  cpf             String          @unique
+  phone           String?
+  picture         String?
+  password        String
+  birthDate       DateTime?
+  observation     String?
+  addressId       Int
+  email           String?
+  themePreference ThemePreference @default(SYSTEM)
+  address         Address         @relation(fields: [addressId], references: [id])
+  payments        Payment[]
 }
 
 model Course {
@@ -105,6 +114,7 @@ model Class {
   teacher     Teacher?        @relation(fields: [teacherId], references: [id])
   students    Class_Student[]
   attendances Attendence[]
+  fees        Fee[]
 }
 
 model Class_Student {
@@ -131,6 +141,7 @@ model Attendence {
 model Fee {
   id          Int      @id @default(autoincrement())
   studentId   Int
+  classId     Int?
   price       Float
   dueDate     DateTime
   description String
@@ -138,6 +149,7 @@ model Fee {
   createdAt DateTime @default(now())
 
   student  Student   @relation(fields: [studentId], references: [id])
+  class    Class?     @relation(fields: [classId], references: [id])
   payments Payment[]
 }
 
@@ -161,4 +173,10 @@ enum PaymentType {
   DEBITO
   DEPOSITO
   PIX
+}
+
+enum ThemePreference {
+  SYSTEM
+  LIGHT
+  DARK
 }

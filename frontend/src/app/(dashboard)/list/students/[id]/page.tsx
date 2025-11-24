@@ -24,7 +24,7 @@ import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import Add from '@mui/icons-material/Add';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import dayjs from 'dayjs';
-import { formatCpf, formatPhone } from "@/lib/formatValues";
+import { formatCpf, formatDate, formatPhone } from "@/lib/formatValues";
 import StudentReport from "@/components/report/StudentReport";
 import { useRef } from "react";
 import { useReactToPrint } from "react-to-print";
@@ -32,12 +32,16 @@ import ModalComponent from "../../../../../components/ModalComponent";
 import { Discount } from "../../../../../interfaces/discount";
 import { BASE_URL } from "../../../../constants/baseUrl";
 import Carne from "@/components/report/carne";
+import { uploadImage } from "@/lib/imageFuncions";
+import { jwtDecode } from "jwt-decode";
+import { UserData } from "@/interfaces/userData";
 
 type Props = {
   params: { id: string };
 };
 
 const SingleStudentPage = ({ params }: Props) => {
+  const [userData, setUserData] = useState<UserData | null>(null);
   const { id } = params;
   const router = useRouter();
   const [student, setStudent] = useState<Student | null>(null);
@@ -69,6 +73,17 @@ const SingleStudentPage = ({ params }: Props) => {
   const [openClassModal, setOpenClassModal] = useState<boolean>(false);
   const [openDiscountModal, setOpenDiscountModal] = useState<boolean>(false);
 
+  // --- ESTADOS PARA IMAGEM ---
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [newPictureFile, setNewPictureFile] = useState<File | null>(null);
+
+  // quando carregar o aluno, já deixa a imagem de preview
+  useEffect(() => {
+    if (student?.picture) {
+      setImagePreview(student.picture);
+    }
+  }, [student]);
+
   const handleOpenClassModal = async (classId: number) => {
     setOpenClassModal(true)
     setSelectedClassId(classId)
@@ -80,6 +95,37 @@ const SingleStudentPage = ({ params }: Props) => {
   const handleClose = () => {
     setOpenClassModal(false)
   }
+
+  useEffect(() => {
+    const fetchUserData = () => {
+      try {
+        const token = Cookies.get("auth_token");
+
+        if (!token) {
+          console.warn("Token não encontrado");
+          setLoading(false);
+          return;
+        }
+
+        const decoded: any = jwtDecode(token);
+
+        // Verifica se o token contém as informações necessárias
+        if (decoded.user && decoded.role) {
+          setUserData({
+            name: decoded.user.name || "Usuário",
+            role: decoded.role,
+            picture: decoded.user.picture || "/avatar.png"
+          });
+        }
+      } catch (error) {
+        console.error("Erro ao decodificar token:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserData();
+  }, []);
 
   const printRef = useRef<HTMLDivElement>(null);
   const printCarneRef = useRef<HTMLDivElement>(null);
@@ -131,31 +177,44 @@ const SingleStudentPage = ({ params }: Props) => {
     fetchStudentFees(Number(id));
   }, [id]);
 
+
   const updateStudent = async () => {
     try {
-      const token = Cookies.get('auth_token')
+      const token = Cookies.get('auth_token');
+      if (!token) return;
+
+      let newPictureUrl = student?.picture ?? null;
+
+      // ✅ Se mudou a foto, subir para o servidor
+      if (newPictureFile) {
+        newPictureUrl = await uploadImage(newPictureFile);
+      }
+
+      const updatedData = {
+        ...newStudent,
+        picture: newPictureUrl, // <- atualiza a foto
+      };
+
       const res = await fetch(`${BASE_URL}/student/update/${id}`, {
+        method: "PUT",
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json' // <- ESSA LINHA É ESSENCIAL
-
+          "Content-Type": "application/json",
         },
-        method: 'PUT',
-        body: JSON.stringify(newStudent)
-      })
+        body: JSON.stringify(updatedData),
+      });
 
-      const data = await res.json()
-
+      const data = await res.json();
       if (!res.ok) throw new Error("Erro ao atualizar aluno");
-      setStudent(data)
 
+      setStudent(data);
+      setIsEditing(false);
     } catch (error) {
-      console.error("Erro:", error);
-
-    } finally {
-      setIsEditing(false)
+      console.error("Erro ao atualizar:", error);
+      window.alert("Erro ao atualizar aluno.");
     }
-  }
+  };
+
 
   const fetchStudentFees = async (studentId: number) => {
     const token = Cookies.get("auth_token");
@@ -301,6 +360,7 @@ const SingleStudentPage = ({ params }: Props) => {
       // setClasses(data)
       window.alert("Matrícula efetuada com sucesso")
       fetchStudentFees(Number(id))
+      fetchStudent()
     } catch (error) {
       setSelectedClasses([])
       console.error("Erro ao confirmar turmas:", error);
@@ -377,11 +437,14 @@ const SingleStudentPage = ({ params }: Props) => {
 
       if (!response.ok) throw new Error("Erro ao deletar matricula do aluno.");
       window.alert("Matrícula deletada com sucesso")
+      handleClose()
       fetchStudent()
+      fetchStudentFees(Number(id));
 
     } catch (error) {
       setSelectedClasses([])
       console.error("Erro ao deletar matricula", error);
+      handleClose()
     }
   }
 
@@ -407,11 +470,13 @@ const SingleStudentPage = ({ params }: Props) => {
       if (!response.ok) throw new Error("Erro ao deletar desconto do aluno.");
       setOpenDiscountModal(false)
       window.alert("Desconto deletado com sucesso")
+      handleClose()
       fetchStudent()
 
     } catch (error) {
       setSelectedClasses([])
       console.error("Erro ao deletar desconto", error);
+      handleClose()
     }
   }
 
@@ -467,6 +532,7 @@ const SingleStudentPage = ({ params }: Props) => {
     <Box
       p={3}
       bgcolor="white"
+      className="dark:bg-dark"
       borderRadius={2}
       m={2}
       sx={{
@@ -484,12 +550,34 @@ const SingleStudentPage = ({ params }: Props) => {
         </Box>
       </Box>
 
-      <Box display="flex" justifyContent="center" alignItems="center" flexWrap="wrap" gap={2} m={6}>
-        <Box display="flex" alignItems="center" gap={2} flexDirection="column">
-          <Avatar src={student.picture} sx={{ width: 150, height: 150 }} />
-          <Typography variant="h6" fontWeight="bold" color="primary">{student.name.toUpperCase()}</Typography>
-        </Box>
-      </Box>
+      <div className="flex flex-col gap-2 w-full md:w-1/4 justify-center mx-auto">
+
+        <label
+          htmlFor="picture"
+          className="cursor-pointer flex items-center justify-center"
+          style={{ width: 150, height: 150 }}
+        >
+          <Avatar
+            src={imagePreview ?? undefined}
+            sx={{ width: 150, height: 150 }}
+          />
+        </label>
+
+        <input
+          id="picture"
+          type="file"
+          accept="image/*"
+          className="hidden disabled:cursor-none"
+          disabled={!isEditing}
+          onChange={(e) => {
+            const file = e.target.files?.[0] ?? null;
+            setNewPictureFile(file);
+            if (file) setImagePreview(URL.createObjectURL(file));
+          }}
+        />
+
+      </div>
+
 
       {/* Dados Pessoais */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
@@ -528,6 +616,19 @@ const SingleStudentPage = ({ params }: Props) => {
             setNewStudent({ ...newStudent, email: e.target.value })
           }}
           InputProps={{ readOnly: !isEditing }}
+          sx={{ flex: 1 }}
+        />
+        <TextField
+          label="Data de nascimento"
+          type="date"
+          value={isEditing ? formatDate(newStudent?.birthDate) : formatDate(student.birthDate)}
+          size="small"
+          InputProps={{ readOnly: !isEditing }}
+          InputLabelProps={{ shrink: true }}
+          onChange={(e) => {
+            if (!isEditing || !newStudent) return;
+            setNewStudent({ ...newStudent, birthDate: e.target.value })
+          }}
           sx={{ flex: 1 }}
         />
         <TextField
@@ -657,6 +758,26 @@ const SingleStudentPage = ({ params }: Props) => {
           sx={{ flex: 1 }}
         />
       </Box>
+
+      <Divider sx={{ mb: 3 }} />
+
+      <TextField
+        label="Observação"
+        multiline
+        value={isEditing ? newStudent?.observation ?? "" : student.observation ?? ""}
+        minRows={4}
+        maxRows={8}
+        fullWidth
+        onChange={(e) => {
+          if (!isEditing || !newStudent) return;
+          setNewStudent({
+            ...newStudent,
+            observation: e.target.value
+          });
+        }}
+        InputProps={{ readOnly: !isEditing }}
+        sx={{ flex: 1 }}
+      />
 
       <Divider sx={{ mb: 3 }} />
 

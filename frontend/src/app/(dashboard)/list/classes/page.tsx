@@ -93,6 +93,7 @@ const CourseListPage = () => {
         photo: c.teacher?.picture || "/default-avatar.png",
         courseName: c.course?.name,
         teacherName: c.teacher?.name,
+        studentCount: c._count?.students ?? 0,
       }));
 
       setClasses(formattedClasses);
@@ -140,6 +141,7 @@ const CourseListPage = () => {
           photo: c.teacher?.picture || "/default-avatar.png",
           courseName: c.course?.name,
           teacherName: c.teacher?.name,
+          studentCount: c._count?.students ?? 0,
         }));
 
         setClasses(formattedClasses);
@@ -190,6 +192,11 @@ const CourseListPage = () => {
       ),
     },
     {
+      field: "studentCount",
+      headerName: "Quant. Alunos",
+      flex: 0.5,
+    },
+    {
       field: "actions",
       headerName: "Ações",
       flex: 0.5,
@@ -202,8 +209,16 @@ const CourseListPage = () => {
               <VisibilityIcon />
             </IconButton>
           </Link>
-          <IconButton>
-            <DeleteIcon />
+          <IconButton
+            onClick={() => {
+              if (confirm("Deseja excluir esta turma?"))
+                fetch(`${BASE_URL}/class/delete/${params.row.id}`, {
+                  method: "DELETE",
+                  headers: { Authorization: `Bearer ${Cookies.get("auth_token")}` },
+                }).then(handleSearch);
+            }}
+          >
+            <DeleteIcon color="error" />
           </IconButton>
         </div>
       ),
@@ -211,7 +226,7 @@ const CourseListPage = () => {
   ];
 
   return (
-    <Box p={3} bgcolor="white" borderRadius={2} m={2} sx={{ height: 'calc(100vh - 64px)', overflowY: 'auto' }}>
+    <Box p={3} bgcolor="white" className="dark:bg-dark" borderRadius={2} m={2} sx={{ height: 'calc(100vh - 64px)', overflowY: 'auto' }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="h6" fontWeight="bold">
           Turmas
@@ -223,14 +238,14 @@ const CourseListPage = () => {
 
       {/* Formulário de busca */}
       <Box display="flex" gap={1} alignItems="center" flexWrap={"wrap"} maxWidth="100%" mb={2}>
-        <TextField label="Nome" sx={{flex:2}}  name="name" value={searchFields.name} onChange={handleInputChange} size="small" />
-        <TextField label="Código" sx={{flex:0.5}}  name="code" value={searchFields.code} onChange={handleInputChange} size="small" />
-        <TextField label="Turno" sx={{flex:0.5}}  name="turno" value={searchFields.turno} onChange={handleInputChange} size="small" />
-        <TextField label="Curso" sx={{flex:1}}  name="courseName" value={searchFields.courseName} onChange={handleInputChange} size="small" />
-        <TextField label="Professor" sx={{flex:1}}  name="teacherName" value={searchFields.teacherName} onChange={handleInputChange} size="small" />
-        <TextField label="Data início" sx={{flex:1}}  name="startDate" type="date" value={searchFields.startDate} onChange={handleInputChange} size="small" InputLabelProps={{ shrink: true }} />
-        <TextField label="Data fim" sx={{flex:1}}  name="endDate" type="date" value={searchFields.endDate} onChange={handleInputChange} size="small" InputLabelProps={{ shrink: true }} />
-        <Button variant="contained"  color="primary" onClick={handleSearch} startIcon={<GridSearchIcon />}>
+        <TextField label="Nome" sx={{ flex: 2 }} name="name" value={searchFields.name} onChange={handleInputChange} size="small" />
+        <TextField label="Código" sx={{ flex: 0.5 }} name="code" value={searchFields.code} onChange={handleInputChange} size="small" />
+        <TextField label="Turno" sx={{ flex: 0.5 }} name="turno" value={searchFields.turno} onChange={handleInputChange} size="small" />
+        <TextField label="Curso" sx={{ flex: 1 }} name="courseName" value={searchFields.courseName} onChange={handleInputChange} size="small" />
+        <TextField label="Professor" sx={{ flex: 1 }} name="teacherName" value={searchFields.teacherName} onChange={handleInputChange} size="small" />
+        <TextField label="Data início" sx={{ flex: 1 }} name="startDate" type="date" value={searchFields.startDate} onChange={handleInputChange} size="small" InputLabelProps={{ shrink: true }} />
+        <TextField label="Data fim" sx={{ flex: 1 }} name="endDate" type="date" value={searchFields.endDate} onChange={handleInputChange} size="small" InputLabelProps={{ shrink: true }} />
+        <Button variant="contained" color="primary" onClick={handleSearch} startIcon={<GridSearchIcon />}>
           Buscar
         </Button>
       </Box>

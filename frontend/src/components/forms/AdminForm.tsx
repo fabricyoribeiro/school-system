@@ -7,8 +7,9 @@ import InputField from "../InputField";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import Cookies from "js-cookie";
-import { TextField } from "@mui/material";
+import { Avatar, TextField } from "@mui/material";
 import { BASE_URL } from "../../app/constants/baseUrl";
+import { uploadImage } from "@/lib/imageFuncions";
 
 
 const formatCpf = (value: string) => {
@@ -28,16 +29,14 @@ const schema = z.object({
 
   phone: z.string().optional(),
   email: z.string()
-    .email({ message: "E-mail inválido" }),
+    .email({ message: "E-mail inválido" }).optional(),
   picture: z
-    .any()
-    .refine(
-      (file) => file instanceof File || file === undefined || file === null || file === "",
-      { message: "A imagem deve ser um arquivo válido." }
-    )
-    .transform((file) => (file === "" ? undefined : file))
-    .optional(),
-
+    .instanceof(File)
+    .optional()
+    .or(z.literal(null))
+    .or(z.undefined()),
+  birthDate: z.string().optional(),
+  observation: z.string().optional(),
   address: z.object({
     street: z.string().optional(),
     number: z.string().optional(),
@@ -62,12 +61,18 @@ const AdminForm = ({
     handleSubmit,
     formState: { errors },
     setValue,
+    reset,
     watch,
   } = useForm<Inputs>({
     resolver: zodResolver(schema),
   });
 
   const cepValue = watch("address.postalCode");
+  const stateValue = watch("address.state");
+  const cityValue = watch("address.city")
+  const streetValue = watch("address.street")
+  const neighborhoodValue = watch("address.neighborhood")
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (cepValue) {
@@ -105,6 +110,13 @@ const AdminForm = ({
   const onSubmit = handleSubmit(async (formData) => {
     try {
       const token = Cookies.get("auth_token");
+      // ✅ Upload da imagem
+      const pictureFile = formData.picture as File | undefined;
+      let pictureUrl = null;
+      if (pictureFile) {
+        pictureUrl = await uploadImage(pictureFile);
+      }
+
       const response = await fetch(`${BASE_URL}/admin/create`, {
         method: "POST",
         headers: {
@@ -115,6 +127,8 @@ const AdminForm = ({
           ...formData,
           cpf: formData.cpf.replace(/\D/g, ""), // Remove formatação
           address: formData.address || undefined,
+          picture: pictureUrl,
+          observation: formData.observation || null,
         }),
       });
 
@@ -127,6 +141,7 @@ const AdminForm = ({
       }
 
       window.alert("Administrador cadastrado com sucesso!");
+      reset()
       console.log("Administrador criado:", result);
     } catch (error) {
       console.error("Erro ao enviar dados:", error);
@@ -136,8 +151,40 @@ const AdminForm = ({
 
 
   return (
-    <form className="flex flex-col gap-8" onSubmit={onSubmit}>
+    <form className="flex flex-col gap-8 dark:bg-dark" onSubmit={onSubmit}>
       <h1 className="text-xl font-semibold">Cadastrar administrador</h1>
+
+      <div className="flex flex-col gap-2 w-full md:w-1/4 justify-center mx-auto">
+
+        <label
+          htmlFor="picture"
+          className="cursor-pointer flex items-center justify-center"
+          style={{ width: 120, height: 120 }}
+        >
+          <Avatar
+            src={imagePreview ?? undefined}
+            sx={{ width: 120, height: 120 }}
+          />
+        </label>
+
+        <input
+          type="file"
+          id="picture"
+          accept="image/*"
+          onChange={(e) => {
+            const file = e.target.files?.[0] ?? null;
+
+            setValue("picture", file, { shouldValidate: true });
+            if (file) setImagePreview(URL.createObjectURL(file));
+          }}
+          className="hidden"
+        />
+
+        {errors.picture?.message && (
+          <p className="text-xs text-red-400">{errors.picture.message.toString()}</p>
+        )}
+      </div>
+
       <div className="flex flex-wrap gap-4">
 
         <TextField label="CPF" type="text" {...register("cpf")} value={watch("cpf") || ""} inputProps={{ maxLength: 14 }} size="small" fullWidth helperText={errors?.cpf?.message}
@@ -152,6 +199,9 @@ const AdminForm = ({
       <div className="flex flex-wrap gap-4">
         <InputField label="Nome" name="name" defaultValue={data?.name} register={register} error={errors?.name} />
       </div>
+      <div className="flex flex-wrap gap-4">
+        <InputField label="Data de Nascimento" name="birthDate" type="date" defaultValue={data?.birthDate ? data.birthDate.split("T")[0] : ""} register={register} error={errors?.birthDate} />
+      </div>
       <span className="text-xs text-gray-400 font-medium">Contato</span>
 
       <div className="flex flex-wrap gap-4">
@@ -165,13 +215,60 @@ const AdminForm = ({
       <span className="text-xs text-gray-400 font-medium">Endereço</span>
       <div className="flex flex-wrap gap-4">
         <InputField label="CEP" name="address.postalCode" register={register} error={errors?.address?.postalCode} />
-        <InputField label="Rua" name="address.street" register={register} error={errors?.address?.street} />
+        <TextField
+          label="Rua"
+          {...register("address.street")}
+          defaultValue={data?.address || ""}
+          error={!!errors.address}
+          InputLabelProps={{ shrink: !!streetValue }}
+          helperText={errors.address?.message?.toString()}
+          size="small"
+          fullWidth
+        />
         <InputField label="Número" name="address.number" register={register} error={errors?.address?.number} />
-        <InputField label="Bairro" name="address.neighborhood" register={register} error={errors?.address?.neighborhood} />
-        <InputField label="Cidade" name="address.city" register={register} error={errors?.address?.city} />
-        <InputField label="Estado" name="address.state" register={register} error={errors?.address?.state} />
+        <TextField
+          label="Bairro"
+          {...register("address.neighborhood")}
+          defaultValue={data?.address || ""}
+          error={!!errors.address}
+          size="small"
+          InputLabelProps={{ shrink: !!neighborhoodValue }}
+          helperText={errors.address?.message?.toString()}
+          fullWidth
+        />
+        <TextField
+          label="Cidade"
+          {...register("address.city")}
+          defaultValue={data?.address || ""}
+          error={!!errors.address}
+          size="small"
+          InputLabelProps={{ shrink: !!cityValue }}
+          helperText={errors.address?.message?.toString()}
+          fullWidth
+        />
+        <TextField
+          label="Estado"
+          {...register("address.state")}
+          defaultValue={data?.address || ""}
+          error={!!errors.address}
+          size="small"
+          InputLabelProps={{ shrink: !!stateValue }}
+          helperText={errors.address?.message?.toString()}
+          fullWidth
+        />
       </div>
-
+      <TextField
+        label="Observação"
+        {...register("observation")}
+        defaultValue={data?.observation || ""}
+        multiline
+        minRows={4}
+        maxRows={8}
+        placeholder="Escreva observações adicionais..."
+        error={!!errors.observation}
+        helperText={errors.observation?.message?.toString()}
+        fullWidth
+      />
       {/* <div className="flex flex-col gap-2 w-full md:w-1/4 justify-center">
         <label className="text-xs text-gray-500 flex items-center gap-2 cursor-pointer" htmlFor="picture">
           <Image src="/upload.png" alt="" width={28} height={28} />

@@ -24,13 +24,14 @@ import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import Add from '@mui/icons-material/Add';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import dayjs from 'dayjs';
-import { formatCpf, formatPhone } from "@/lib/formatValues";
+import { formatCpf, formatDate, formatPhone } from "@/lib/formatValues";
 import AdminReport from "@/components/report/AdminReport";
 import { useRef } from "react";
 import { useReactToPrint } from "react-to-print";
 import ModalComponent from "../../../../../components/ModalComponent";
 import { Discount } from "../../../../../interfaces/discount";
 import { BASE_URL } from "../../../../constants/baseUrl";
+import { uploadImage } from "@/lib/imageFuncions";
 
 type Props = {
   params: { id: string };
@@ -57,16 +58,27 @@ const SingleAdminPage = ({ params }: Props) => {
   const [selectedClasses, setSelectedClasses] = useState<Classe[]>([]);
   const [selectdClassId, setSelectedClassId] = useState<number | null>(null);
   const [classe, setClasse] = useState('');
-  
+
   const [selectedDiscountId, setSelectedDiscountId] = useState<number | null>(null);
   const [discounts, setDiscounts] = useState<Discount[]>([]);
-  
+
   const [selectVisible, setSelectVisible] = useState<boolean>(false);
   const [selectDiscountVisible, setSelectDiscountVisible] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
 
   const [openClassModal, setOpenClassModal] = useState<boolean>(false);
   const [openDiscountModal, setOpenDiscountModal] = useState<boolean>(false);
+
+  // --- ESTADOS PARA IMAGEM ---
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [newPictureFile, setNewPictureFile] = useState<File | null>(null);
+
+  // quando carregar o aluno, já deixa a imagem de preview
+  useEffect(() => {
+    if (admin?.picture) {
+      setImagePreview(admin.picture);
+    }
+  }, [admin]);
 
   const handleOpenClassModal = async (classId: number) => {
     setOpenClassModal(true)
@@ -123,27 +135,41 @@ const SingleAdminPage = ({ params }: Props) => {
 
   const updateAdmin = async () => {
     try {
-      const token = Cookies.get('auth_token')
+      const token = Cookies.get('auth_token');
+      if (!token) return;
+
+      let newPictureUrl = admin?.picture ?? null;
+
+      // ✅ Se mudou a foto, subir para o servidor
+      if (newPictureFile) {
+        newPictureUrl = await uploadImage(newPictureFile);
+      }
+
+      const updatedData = {
+        ...newAdmin,
+        picture: newPictureUrl, // <- atualiza a foto
+      };
+
       const res = await fetch(`${BASE_URL}/admin/update/${id}`, {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json' // <- ESSA LINHA É ESSENCIAL
-
+          'Content-Type': 'application/json'
         },
         method: 'PUT',
-        body: JSON.stringify(newAdmin)
+        body: JSON.stringify(updatedData) // ✅ CORRIGIDO - enviar updatedData
       })
 
       const data = await res.json()
 
-      if (!res.ok) throw new Error("Erro ao atualizar Adminstrador");
-      setAdmin(data)
+      if (!res.ok) throw new Error("Erro ao atualizar admin");
+
+      setAdmin(data);
+      setIsEditing(false);
+      setNewPictureFile(null); // ✅ Limpar o arquivo após salvar
 
     } catch (error) {
       console.error("Erro:", error);
-
-    } finally {
-      setIsEditing(false)
+      window.alert("Erro ao atualizar admin.");
     }
   }
 
@@ -442,8 +468,8 @@ const SingleAdminPage = ({ params }: Props) => {
   }
 
 
-    if (loading) return (
-      <Box
+  if (loading) return (
+    <Box
       flex={1}
       display="flex"
       justifyContent="center"
@@ -457,6 +483,7 @@ const SingleAdminPage = ({ params }: Props) => {
     <Box
       p={3}
       bgcolor="white"
+      className="dark:bg-dark"
       borderRadius={2}
       m={2}
       sx={{
@@ -474,12 +501,33 @@ const SingleAdminPage = ({ params }: Props) => {
         </Box>
       </Box>
 
-      <Box display="flex" justifyContent="center" alignItems="center" flexWrap="wrap" gap={2} m={6}>
-        <Box display="flex" alignItems="center" gap={2} flexDirection="column">
-          <Avatar src={admin.picture} sx={{ width: 150, height: 150 }} />
-          <Typography variant="h6" fontWeight="bold" color="primary">{admin.name.toUpperCase()}</Typography>
-        </Box>
-      </Box>
+      <div className="flex flex-col gap-2 w-full md:w-1/4 justify-center mx-auto">
+
+        <label
+          htmlFor="picture"
+          className="cursor-pointer flex items-center justify-center"
+          style={{ width: 150, height: 150 }}
+        >
+          <Avatar
+            src={imagePreview ?? undefined}
+            sx={{ width: 150, height: 150 }}
+          />
+        </label>
+
+        <input
+          id="picture"
+          type="file"
+          accept="image/*"
+          className="hidden disabled:cursor-none"
+          disabled={!isEditing}
+          onChange={(e) => {
+            const file = e.target.files?.[0] ?? null;
+            setNewPictureFile(file);
+            if (file) setImagePreview(URL.createObjectURL(file));
+          }}
+        />
+
+      </div>
 
       {/* Dados Pessoais */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
@@ -508,6 +556,19 @@ const SingleAdminPage = ({ params }: Props) => {
           value={admin.cpf ? formatCpf(admin.cpf) : ""}
           size="small"
           InputProps={{ readOnly: true }}
+          sx={{ flex: 1 }}
+        />
+        <TextField
+          label="Data de nascimento"
+          type="date"
+          value={isEditing ? formatDate(newAdmin?.birthDate) : formatDate(admin.birthDate)}
+          size="small"
+          InputProps={{ readOnly: !isEditing }}
+          InputLabelProps={{ shrink: true }}
+          onChange={(e) => {
+            if (!isEditing || !newAdmin) return;
+            setNewAdmin({ ...newAdmin, birthDate: e.target.value })
+          }}
           sx={{ flex: 1 }}
         />
         <TextField label="Email"
@@ -650,6 +711,25 @@ const SingleAdminPage = ({ params }: Props) => {
 
       <Divider sx={{ mb: 3 }} />
 
+      <TextField
+        label="Observação"
+        multiline
+        value={isEditing ? newAdmin?.observation ?? "" : admin.observation ?? ""}
+        minRows={4}
+        maxRows={8}
+        fullWidth
+        onChange={(e) => {
+          if (!isEditing || !newAdmin) return;
+          setNewAdmin({
+            ...newAdmin,
+            observation: e.target.value
+          });
+        }}
+        InputProps={{ readOnly: !isEditing }}
+        sx={{ flex: 1 }}
+      />
+
+      <Divider sx={{ mb: 3 }} />
 
       <Box className={`${selectDiscountVisible ? 'visible' : 'hidden'} mb-4`}>
         <FormControl className="w-32 " size="small">

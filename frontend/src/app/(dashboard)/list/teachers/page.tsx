@@ -69,12 +69,7 @@ const TeacherListPage = () => {
         }
       });
 
-      // ✅ Impede busca se todos os campos estiverem vazios
-      if ([...queryParams].length === 0) {
-        console.warn("Nenhum campo de busca preenchido.");
-        setTeachers([]); // limpa resultados anteriores se quiser
-        return;
-      }
+
 
       const response = await fetch(`${BASE_URL}/teacher/search?${queryParams.toString()}`, {
         method: "GET",
@@ -170,8 +165,16 @@ const TeacherListPage = () => {
               <VisibilityIcon />
             </IconButton>
           </Link>
-          <IconButton>
-            <DeleteIcon />
+          <IconButton
+            onClick={() => {
+              if (confirm("Deseja excluir este professor?"))
+                fetch(`${BASE_URL}/teacher/delete/${params.row.id}`, {
+                  method: "DELETE",
+                  headers: { Authorization: `Bearer ${Cookies.get("auth_token")}` },
+                }).then(handleSearch);
+            }}
+          >
+            <DeleteIcon color="error" />
           </IconButton>
 
         </div>
@@ -183,6 +186,7 @@ const TeacherListPage = () => {
         <Box
       p={3}
       bgcolor="white"
+      className="dark:bg-dark"
       borderRadius={2}
       m={2}
       sx={{

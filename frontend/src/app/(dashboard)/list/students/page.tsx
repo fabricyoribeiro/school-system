@@ -68,12 +68,6 @@ const StudentListPage = () => {
         }
       });
 
-      // ✅ Impede busca se todos os campos estiverem vazios
-      if ([...queryParams].length === 0) {
-        console.warn("Nenhum campo de busca preenchido.");
-        setStudents([]); // limpa resultados anteriores se quiser
-        return;
-      }
 
       const response = await fetch(`${BASE_URL}/student/search?${queryParams.toString()}`, {
         method: "GET",
@@ -169,9 +163,43 @@ const StudentListPage = () => {
               <VisibilityIcon />
             </IconButton>
           </Link>
-          <IconButton>
-            <DeleteIcon />
-          </IconButton>
+<IconButton
+  onClick={async () => {
+    if (!confirm("Deseja excluir este aluno?")) return;
+
+    try {
+      const response = await fetch(`${BASE_URL}/student/delete/${params.row.id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${Cookies.get("auth_token")}`,
+        },
+      });
+
+      if (!response.ok) {
+        // tenta pegar o erro da API
+        const errorData = await response.json().catch(() => null);
+
+        const message =
+          errorData?.message ||
+          errorData?.error ||
+          "Erro desconhecido ao excluir.";
+
+        alert("Erro: " + message);
+        return;
+      }
+
+      // sucesso
+      handleSearch();
+
+    } catch (err: any) {
+      // erro de rede ou algo inesperado
+      alert("Erro inesperado: " + err.message);
+    }
+  }}
+>
+  <DeleteIcon color="error" />
+</IconButton>
+
         </div>
       ),
     },
@@ -181,6 +209,7 @@ const StudentListPage = () => {
     <Box
       p={3}
       bgcolor="white"
+      className="dark:bg-dark"
       borderRadius={2}
       m={2}
       sx={{

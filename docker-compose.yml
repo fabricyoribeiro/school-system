@@ -1,0 +1,65 @@
+services:
+  nginx-proxy-manager:
+    image: 'jc21/nginx-proxy-manager:latest'
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    environment:
+      - DISABLE_IPV6=true
+    ports:
+      - "80:80"
+      - "81:81"
+      - "443:443"
+    volumes:
+      - ./npm/data:/data
+      - ./npm/letsencrypt:/etc/letsencrypt
+
+
+  postgres:
+    image: bitnami/postgresql:latest
+    ports:
+      - '5432:5432'
+    container_name: postgres
+    environment:
+      POSTGRES_USER: joao
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: escoladb
+    volumes:
+      - pdv-pg-data:/bitnami/postgresql
+    restart: unless-stopped
+
+
+  backend:
+    build:
+      context: ./backend
+    container_name: backend
+    ports:
+      - "4040:4040"
+    environment:
+      NODE_ENV: production
+      JWT_SECRET: chave_secreta
+      PORT: 4040
+      DATABASE_URL: postgresql://joao:password@postgres:5432/escoladb
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: frontend
+    ports:
+      - "4000:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_AXIOS_BASE_URL: https://api.sistema.cursosconecta.com
+      JWT_SECRET: chave_secreta
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+
+volumes:
+  pdv-pg-data:
+
+

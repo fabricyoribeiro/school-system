@@ -24,12 +24,13 @@ import PrintIcon from '@mui/icons-material/Print';
 import Add from '@mui/icons-material/Add';
 // import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import dayjs from 'dayjs';
-import { formatCpf, formatPhone } from "@/lib/formatValues";
+import { formatCpf, formatDate, formatPhone } from "@/lib/formatValues";
 import TeacherReport from "@/components/report/TeacherReport";
 import { useRef } from "react";
 import { useReactToPrint } from "react-to-print";
 import { GridDeleteForeverIcon } from "@mui/x-data-grid";
 import { BASE_URL } from "../../../../constants/baseUrl";
+import { uploadImage } from "@/lib/imageFuncions";
 
 type Props = {
   params: { id: string };
@@ -69,6 +70,18 @@ const SingleTeacherPage = ({ params }: Props) => {
   const [selectdClassId, setSelectedClassId] = useState<number | null>(null);
 
   const [open, setOpen] = useState(false);
+
+  // --- ESTADOS PARA IMAGEM ---
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [newPictureFile, setNewPictureFile] = useState<File | null>(null);
+
+  // quando carregar o professor, já deixa a imagem de preview
+  useEffect(() => {
+    if (teacher?.picture) {
+      setImagePreview(teacher.picture);
+    }
+  }, [teacher]);
+
 
   const style = {
     position: 'absolute',
@@ -132,27 +145,40 @@ const SingleTeacherPage = ({ params }: Props) => {
 
   const updateTeacher = async () => {
     try {
-      const token = Cookies.get('auth_token')
+      const token = Cookies.get('auth_token');
+      if (!token) return;
+
+      let newPictureUrl = teacher?.picture ?? null;
+
+      // ✅ Se mudou a foto, subir para o servidor
+      if (newPictureFile) {
+        newPictureUrl = await uploadImage(newPictureFile);
+      }
+
+      const updatedData = {
+        ...newTeacher,
+        picture: newPictureUrl, // <- atualiza a foto
+      };
+
       const res = await fetch(`${BASE_URL}/teacher/update/${id}`, {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json' // <- ESSA LINHA É ESSENCIAL
-
+          'Content-Type': 'application/json'
         },
         method: 'PUT',
-        body: JSON.stringify(newTeacher)
+        body: JSON.stringify(updatedData) // ✅ CORRIGIDO - enviar updatedData que contém a foto
       })
 
       const data = await res.json()
 
       if (!res.ok) throw new Error("Erro ao atualizar professor");
+
       setTeacher(data)
+      setIsEditing(false)
 
     } catch (error) {
       console.error("Erro:", error);
-
-    } finally {
-      setIsEditing(false)
+      window.alert("Erro ao atualizar professor.");
     }
   }
 
@@ -252,11 +278,15 @@ const SingleTeacherPage = ({ params }: Props) => {
   // ];
 
   const handleEdit = () => {
-    setIsEditing(true)
+    setIsEditing(true);
     if (teacher) {
-      setNewTeacher(teacher as Teacher)
+      setNewTeacher({
+        ...teacher,
+        phone: teacher.phone ?? "", // evita undefined
+        id: teacher.id ?? 0,
+      });
     }
-  }
+  };
 
   const confirmClasses = async () => {
     setSelectVisible(false)
@@ -360,7 +390,7 @@ const SingleTeacherPage = ({ params }: Props) => {
 
 
   if (loading) return (
-      <Box
+    <Box
       flex={1}
       display="flex"
       justifyContent="center"
@@ -374,6 +404,7 @@ const SingleTeacherPage = ({ params }: Props) => {
     <Box
       p={3}
       bgcolor="white"
+      className="dark:bg-dark"
       borderRadius={2}
       m={2}
       sx={{
@@ -391,12 +422,33 @@ const SingleTeacherPage = ({ params }: Props) => {
         </Box>
       </Box>
 
-      <Box display="flex" justifyContent="center" alignItems="center" flexWrap="wrap" gap={2} m={6}>
-        <Box display="flex" alignItems="center" gap={2} flexDirection="column">
-          <Avatar src={teacher.picture} sx={{ width: 150, height: 150 }} />
-          <Typography variant="h6" fontWeight="bold" color="primary">{teacher.name.toUpperCase()}</Typography>
-        </Box>
-      </Box>
+      <div className="flex flex-col gap-2 w-full md:w-1/4 justify-center mx-auto">
+
+        <label
+          htmlFor="picture"
+          className="cursor-pointer flex items-center justify-center"
+          style={{ width: 150, height: 150 }}
+        >
+          <Avatar
+            src={imagePreview ?? undefined}
+            sx={{ width: 150, height: 150 }}
+          />
+        </label>
+
+        <input
+          id="picture"
+          type="file"
+          accept="image/*"
+          className="hidden disabled:cursor-none"
+          disabled={!isEditing}
+          onChange={(e) => {
+            const file = e.target.files?.[0] ?? null;
+            setNewPictureFile(file);
+            if (file) setImagePreview(URL.createObjectURL(file));
+          }}
+        />
+
+      </div>
 
       {/* Dados Pessoais */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
@@ -425,6 +477,19 @@ const SingleTeacherPage = ({ params }: Props) => {
           value={teacher.cpf ? formatCpf(teacher.cpf) : ""}
           size="small"
           InputProps={{ readOnly: true }}
+          sx={{ flex: 1 }}
+        />
+        <TextField
+          label="Data de nascimento"
+          type="date"
+          value={isEditing ? formatDate(newTeacher?.birthDate) : formatDate(teacher.birthDate)}
+          size="small"
+          InputProps={{ readOnly: !isEditing }}
+          InputLabelProps={{ shrink: true }}
+          onChange={(e) => {
+            if (!isEditing || !newTeacher) return;
+            setNewTeacher({ ...newTeacher, birthDate: e.target.value })
+          }}
           sx={{ flex: 1 }}
         />
         <TextField label="Email"
@@ -565,6 +630,26 @@ const SingleTeacherPage = ({ params }: Props) => {
           sx={{ flex: 1 }}
         />
       </Box>
+
+      <Divider sx={{ mb: 3 }} />
+
+      <TextField
+        label="Observação"
+        multiline
+        value={isEditing ? newTeacher?.observation ?? "" : teacher.observation ?? ""}
+        minRows={4}
+        maxRows={8}
+        fullWidth
+        onChange={(e) => {
+          if (!isEditing || !newTeacher) return;
+          setNewTeacher({
+            ...newTeacher,
+            observation: e.target.value
+          });
+        }}
+        InputProps={{ readOnly: !isEditing }}
+        sx={{ flex: 1 }}
+      />
 
       <Divider sx={{ mb: 3 }} />
 
